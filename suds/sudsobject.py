@@ -181,6 +181,18 @@ class Object(object):
     def __unicode__(self):
         return self.__printer__.tostr(self)
 
+    def __hash__(self):
+        return hash((type(self).__name__, tuple(self.__keylist__), (getattr(self, item) for item in self.__keylist__)))
+
+    def __eq__(self, other):
+        if not isinstance(other, Object):
+            return False
+        if self.__keylist__ != other.__keylist__:
+            return False
+        for item in self.__keylist__:
+            if getattr(self, item) != getattr(other, item):
+                return False
+        return True
 
 class Iter(object):
 
