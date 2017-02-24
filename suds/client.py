@@ -516,7 +516,7 @@ class Method(object):
     @type I{wsdl} Method.
     """
 
-    def __init__(self, client, method):
+    def __init__(self, client, methods):
         """
         @param client: A client object.
         @type client: L{Client}
@@ -524,14 +524,22 @@ class Method(object):
         @type I{raw} Method.
         """
         self.client = client
-        self.method = method
+        assert len(methods) > 0
+        self.methods = methods
+        self.method = methods[0] if len(methods) == 1 else None
+
+    def get_method(self, *args, **kwargs):
+        return self.method
+
+    def __getitem__(self, item):
+        return Method(self.client, [self.methods[item]])
 
     def __call__(self, *args, **kwargs):
         """
         Invoke the method.
         """
         clientclass = self.clientclass(kwargs)
-        client = clientclass(self.client, self.method)
+        client = clientclass(self.client, self.get_method(args, kwargs))
         if not self.faults():
             try:
                 return client.invoke(args, kwargs)
@@ -766,6 +774,10 @@ class SimClient(SoapClient):
         reply = simulation.get('reply')
         fault = simulation.get('fault')
         if msg is None:
+            binding = self.method.binding.input
+            soapenv = binding.get_message(self.method, args, kwargs)
+            self.last_sent(soapenv)
+
             if reply is not None:
                 return self.__reply(reply, args, kwargs)
             if fault is not None:

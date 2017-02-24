@@ -233,40 +233,45 @@ class Definitions(WObject):
         for p in service.ports:
             binding = p.binding
             ptype = p.binding.type
-            operations = p.binding.type.operations.values()
-            for name in [op.name for op in operations]:
-                m = Facade('Method')
-                m.name = name
-                m.location = p.location
-                m.binding = Facade('binding')
-                op = binding.operation(name)
-                m.soap = op.soap
-                key = '/'.join((op.soap.style, op.soap.input.body.use))
-                m.binding.input = bindings.get(key)
-                key = '/'.join((op.soap.style, op.soap.output.body.use))
-                m.binding.output = bindings.get(key)
-                op = ptype.operation(name)
-                p.methods[name] = m
+            operations = p.binding.type.operations
+            for name in operations.keys():
+                for operation in operations[name]:
+                    m = Facade('Method')
+                    m.name = name
+                    m.location = p.location
+                    m.binding = Facade('binding')
+                    op = binding.operation(name, operation.input, operation.output)
+                    m.soap = op.soap
+                    key = '/'.join((op.soap.style, op.soap.input.body.use))
+                    m.binding.input = bindings.get(key)
+                    key = '/'.join((op.soap.style, op.soap.output.body.use))
+                    m.binding.output = bindings.get(key)
+                    op = ptype.operation(name)
+
+                    if name not in p.methods:
+                        p.methods[name] = []
+                    p.methods[name].append(m)
 
     def set_wrapped(self):
         """ set (wrapped|bare) flag on messages """
         for b in self.bindings.values():
-            for op in b.operations.values():
-                for body in (op.soap.input.body, op.soap.output.body):
-                    body.wrapped = False
-                    if len(body.parts) != 1:
-                        continue
-                    for p in body.parts:
-                        if p.element is None:
+            for ops in b.operations.values():
+                for op in ops:
+                    for body in (op.soap.input.body, op.soap.output.body):
+                        body.wrapped = False
+                        if len(body.parts) != 1:
                             continue
-                        query = ElementQuery(p.element)
-                        pt = query.execute(self.schema)
-                        if pt is None:
-                            raise TypeNotFound(query.ref)
-                        resolved = pt.resolve()
-                        if resolved.builtin():
-                            continue
-                        body.wrapped = True
+                        for p in body.parts:
+                            if p.element is None:
+                                continue
+                            query = ElementQuery(p.element)
+                            pt = query.execute(self.schema)
+                            if pt is None:
+                                raise TypeNotFound(query.ref)
+                            resolved = pt.resolve()
+                            if resolved.builtin():
+                                continue
+                            body.wrapped = True
 
     def __getstate__(self):
         nopickle = ('options',)
@@ -477,7 +482,10 @@ class PortType(NamedObject):
                 f.message = fault.get('message')
                 faults.append(f)
             op.faults = faults
-            self.operations[op.name] = op
+
+            if op.name not in self.operations:
+                self.operations[op.name] = []
+            self.operations[op.name].append(op)
 
     def resolve(self, definitions):
         """
@@ -485,31 +493,32 @@ class PortType(NamedObject):
         @param definitions: A definitions object.
         @type definitions: L{Definitions}
         """
-        for op in self.operations.values():
-            if op.input is None:
-                op.input = Message(Element('no-input'), definitions)
-            else:
-                qref = qualify(op.input, self.root, definitions.tns)
-                msg = definitions.messages.get(qref)
-                if msg is None:
-                    raise Exception("msg '%s', not-found" % op.input)
+        for ops in self.operations.values():
+            for op in ops:
+                if op.input is None:
+                    op.input = Message(Element('no-input'), definitions)
                 else:
-                    op.input = msg
-            if op.output is None:
-                op.output = Message(Element('no-output'), definitions)
-            else:
-                qref = qualify(op.output, self.root, definitions.tns)
-                msg = definitions.messages.get(qref)
-                if msg is None:
-                    raise Exception("msg '%s', not-found" % op.output)
+                    qref = qualify(op.input, self.root, definitions.tns)
+                    msg = definitions.messages.get(qref)
+                    if msg is None:
+                        raise Exception("msg '%s', not-found" % op.input)
+                    else:
+                        op.input = msg
+                if op.output is None:
+                    op.output = Message(Element('no-output'), definitions)
                 else:
-                    op.output = msg
-            for f in op.faults:
-                qref = qualify(f.message, self.root, definitions.tns)
-                msg = definitions.messages.get(qref)
-                if msg is None:
-                    raise Exception("msg '%s', not-found" % f.message)
-                f.message = msg
+                    qref = qualify(op.output, self.root, definitions.tns)
+                    msg = definitions.messages.get(qref)
+                    if msg is None:
+                        raise Exception("msg '%s', not-found" % op.output)
+                    else:
+                        op.output = msg
+                for f in op.faults:
+                    qref = qualify(f.message, self.root, definitions.tns)
+                    msg = definitions.messages.get(qref)
+                    if msg is None:
+                        raise Exception("msg '%s', not-found" % f.message)
+                    f.message = msg
 
     def operation(self, name):
         """
@@ -585,6 +594,7 @@ class Binding(NamedObject):
             if input is None:
                 input = Element('input', ns=wsdlns)
             body = input.getChild('body')
+            soap.input.name = input['name']
             self.body(definitions, soap.input.body, body)
             for header in input.getChildren('header'):
                 self.header(definitions, soap.input, header)
@@ -592,6 +602,7 @@ class Binding(NamedObject):
             if output is None:
                 output = Element('output', ns=wsdlns)
             body = output.getChild('body')
+            soap.output.name = output['name']
             self.body(definitions, soap.output.body, body)
             for header in output.getChildren('header'):
                 self.header(definitions, soap.output, header)
@@ -606,7 +617,10 @@ class Binding(NamedObject):
                 f.use = sf.get('use', default='literal')
                 faults.append(f)
             soap.faults = faults
-            self.operations[op.name] = op
+
+            if op.name not in self.operations:
+                self.operations[op.name] = []
+            self.operations[op.name].append(op)
 
     def body(self, definitions, body, root):
         """ add the input/output body properties """
@@ -657,10 +671,11 @@ class Binding(NamedObject):
         @type definitions: L{Definitions}
         """
         self.resolveport(definitions)
-        for op in self.operations.values():
-            self.resolvesoapbody(definitions, op)
-            self.resolveheaders(definitions, op)
-            self.resolvefaults(definitions, op)
+        for ops in self.operations.values():
+            for op in ops:
+                self.resolvesoapbody(definitions, op)
+                self.resolveheaders(definitions, op)
+                self.resolvefaults(definitions, op)
 
     def resolveport(self, definitions):
         """
@@ -684,9 +699,19 @@ class Binding(NamedObject):
         @param op: An I{operation} object.
         @type op: I{operation}
         """
-        ptop = self.type.operation(op.name)
-        if ptop is None:
+        ptops = self.type.operation(op.name)
+        if ptops is None:
             raise Exception("operation '%s' not defined in portType" % op.name)
+        if len(ptops) == 1:
+            ptop = ptops[0]
+        else:
+            ptop = None
+            for p in ptops:
+                if p.input.name == op.soap.input.name and p.output.name == op.soap.output.name:
+                    ptop = p
+            if ptop is None:
+                raise Exception("operation '%s' is defined multiple times in portType and input/output names do not match to any of them" % op.name)
+
         soap = op.soap
         parts = soap.input.body.parts
         if len(parts):
@@ -753,7 +778,7 @@ class Binding(NamedObject):
                 continue
             raise Exception("fault '%s' not defined in portType '%s'" % (fault.name, self.type.name))
 
-    def operation(self, name):
+    def operation(self, name, input=None, output=None):
         """
         Shortcut used to get a contained operation by name.
         @param name: An operation name.
@@ -763,9 +788,18 @@ class Binding(NamedObject):
         @raise L{MethodNotFound}: When not found.
         """
         try:
-            return self.operations[name]
+            ops = self.operations[name]
         except:
             raise MethodNotFound(name)
+
+        if len(ops) == 1:
+            return ops[0]
+        elif input is not None and output is not None:
+            for op in ops:
+                if op.soap.input.name == input.name and op.soap.output.name == output.name:
+                    return op
+
+        raise MethodNotFound(name)
 
     def __gt__(self, other):
         return (not isinstance(other, Service))
@@ -801,7 +835,7 @@ class Port(NamedObject):
             self.location = address.get('location').encode('utf-8')
         self.methods = {}
 
-    def method(self, name):
+    def method(self, name, input_name=None, output_name=None):
         """
         Get a method defined in this portType by name.
         @param name: A method name.
@@ -809,7 +843,17 @@ class Port(NamedObject):
         @return: The requested method object.
         @rtype: I{Method}
         """
-        return self.methods.get(name)
+        methods = self.methods.get(name)
+        if len(methods) == 1:
+            return methods[0]
+        elif input_name is not None and output_name is not None:
+            for m in methods:
+                if m.soap.input.name == input_name and m.soap.output.name == output_name:
+                    return m
+
+
+        return None  # TODO: Throw exception????
+
 
 
 class Service(NamedObject):

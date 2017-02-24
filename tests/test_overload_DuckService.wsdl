@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:impl="http://www.example.com/donald"
+                  xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+                  xmlns:tns1="http://www.example.com/donald" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:wsdlsoap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.example.com/donald">
+    <wsdl:types>
+        <schema xmlns="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.example.com/donald">
+            <import namespace="http://schemas.xmlsoap.org/soap/encoding/"/>
+        </schema>
+    </wsdl:types>
+
+
+    <wsdl:message name="Disco.CountRequest">
+        <wsdl:part name="SessionID" type="xsd:int"/>
+        <wsdl:part name="ApplianceID" type="xsd:int"/>
+        <wsdl:part name="ChangedOnly" type="xsd:boolean"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.CountResponse">
+        <wsdl:part name="Count" type="xsd:int"/>
+    </wsdl:message>
+
+    <wsdl:message name="Disco.ListRequest">
+        <wsdl:part name="SessionID" type="xsd:int"/>
+        <wsdl:part name="ApplianceID" type="xsd:int"/>
+        <wsdl:part name="ChangedOnly" type="xsd:boolean"/>
+        <wsdl:part name="Offset" type="xsd:int"/>
+        <wsdl:part name="Limit" type="xsd:int"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.ListResponse">
+        <wsdl:part name="Job" type="xsd:int"/>
+        <wsdl:part name="Count" type="xsd:int"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.ListNewRequest">
+        <wsdl:part name="SessionID" type="xsd:int"/>
+        <wsdl:part name="ApplianceID" type="xsd:int"/>
+        <wsdl:part name="ChangedOnly" type="xsd:boolean"/>
+        <wsdl:part name="Offset" type="xsd:int"/>
+        <wsdl:part name="Limit" type="xsd:int"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.ListNewResponse">
+        <wsdl:part name="Job" type="xsd:string"/>
+        <wsdl:part name="Count" type="xsd:int"/>
+    </wsdl:message>
+
+    <wsdl:message name="Disco.SubmitRequestOld">
+        <wsdl:part name="SessionID" type="xsd:int"/>
+        <wsdl:part name="ApplianceID" type="xsd:int"/>
+        <wsdl:part name="JobID" type="xsd:int"/>
+        <wsdl:part name="JobComplete" type="xsd:boolean"/>
+        <wsdl:part name="ErrorMessage" type="xsd:string"/>
+        <wsdl:part name="Asset" type="xsd:string"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.SubmitResponseOld">
+        <wsdl:part name="MalformedJob" type="xsd:boolean"/>
+        <wsdl:part name="InvalidJob" type="xsd:boolean"/>
+        <wsdl:part name="Msg" type="xsd:string"/>
+    </wsdl:message>
+
+    <wsdl:message name="Disco.SubmitRequest">
+        <wsdl:part name="sessionID" type="xsd:int"/>
+        <wsdl:part name="errorMessage" type="xsd:string"/>
+        <wsdl:part name="assetData" type="xsd:string"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.SubmitResponse">
+        <wsdl:part name="resendList" type="xsd:string"/>
+    </wsdl:message>
+
+    <wsdl:message name="Disco.SubmitRequest2">
+        <wsdl:part name="sessionID" type="xsd:int"/>
+        <wsdl:part name="jobID" type="xsd:int"/>
+        <wsdl:part name="jobComplete" type="xsd:boolean"/>
+        <wsdl:part name="errorMessage" type="xsd:string"/>
+        <wsdl:part name="assetData" type="xsd:string"/>
+    </wsdl:message>
+    <wsdl:message name="Disco.SubmitResponse2">
+        <wsdl:part name="invalidJob" type="xsd:boolean"/>
+        <wsdl:part name="resendList" type="xsd:string"/>
+    </wsdl:message>
+    <wsdl:portType name="DuckService_PortType">
+
+
+        <wsdl:operation name="Disco.Count" parameterOrder="SessionID ApplianceID ChangedOnly">
+            <wsdl:input message="impl:Disco.CountRequest" name="Disco.CountRequest"/>
+            <wsdl:output message="impl:Disco.CountResponse" name="Disco.CountResponse"/>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.List" parameterOrder="SessionID ApplianceID ChangedOnly Offset Limit">
+            <wsdl:input message="impl:Disco.ListRequest" name="Disco.ListRequest"/>
+            <wsdl:output message="impl:Disco.ListResponse" name="Disco.ListResponse"/>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.ListNew" parameterOrder="SessionID ApplianceID ChangedOnly Offset Limit">
+            <wsdl:input message="impl:Disco.ListNewRequest" name="Disco.ListNewRequest"/>
+            <wsdl:output message="impl:Disco.ListNewResponse" name="Disco.ListNewResponse"/>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.Submit" parameterOrder="sessionID errorMessage assetData">
+            <wsdl:input message="impl:Disco.SubmitRequest" name="Disco.SubmitRequest"/>
+            <wsdl:output message="impl:Disco.SubmitResponse" name="Disco.SubmitResponse"/>
+        </wsdl:operation>
+        <wsdl:operation name="Disco.Submit" parameterOrder="sessionID jobID jobComplete errorMessage assetData">
+            <wsdl:input message="impl:Disco.SubmitRequest2" name="Disco.SubmitRequest2"/>
+            <wsdl:output message="impl:Disco.SubmitResponse2" name="Disco.SubmitResponse2"/>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.Submit"
+                        parameterOrder="SessionID ApplianceID JobID JobComplete ErrorMessage Asset">
+            <wsdl:input message="impl:Disco.SubmitRequestOld" name="Disco.SubmitRequestOld"/>
+            <wsdl:output message="impl:Disco.SubmitResponseOld" name="Disco.SubmitResponseOld"/>
+        </wsdl:operation>
+
+
+    </wsdl:portType>
+    <wsdl:binding name="DuckServiceSoapBinding" type="impl:DuckService_PortType">
+        <wsdlsoap:binding style="rpc" transport="http://schemas.xmlsoap.org/soap/http"/>
+
+
+        <wsdl:operation name="Disco.Count">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.CountRequest">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.CountResponse">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+        <wsdl:operation name="Disco.List">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.ListRequest">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.ListResponse">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.ListNew">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.ListNewRequest">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.ListNewResponse">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+
+        <wsdl:operation name="Disco.Submit">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.SubmitRequest">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.SubmitResponse">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+        <wsdl:operation name="Disco.Submit">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.SubmitRequest2">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.SubmitResponse2">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+        <wsdl:operation name="Disco.Submit">
+            <wsdlsoap:operation soapAction=""/>
+            <wsdl:input name="Disco.SubmitRequestOld">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:input>
+            <wsdl:output name="Disco.SubmitResponseOld">
+                <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
+                               namespace="http://www.example.com/donald" use="encoded"/>
+            </wsdl:output>
+        </wsdl:operation>
+
+
+    </wsdl:binding>
+    <wsdl:service name="DuckServiceService">
+        <wsdl:port binding="impl:DuckServiceSoapBinding" name="DuckService">
+            <wsdlsoap:address location="http://127.0.0.1/duck/service"/>
+        </wsdl:port>
+    </wsdl:service>
+</wsdl:definitions>

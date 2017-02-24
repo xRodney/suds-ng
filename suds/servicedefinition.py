@@ -81,13 +81,14 @@ class ServiceDefinition(object):
         timer.start()
         for port in self.service.ports:
             p = self.findport(port)
-            for op in port.binding.operations.values():
-                m = p[0].method(op.name)
-                binding = m.binding.input
-                method = (m.name, binding.param_defs(m))
-                p[1].append(method)
-                metrics.log.debug("method '%s' created: %s", m.name, timer)
-            p[1].sort()
+            for name, ops in port.binding.operations.items():
+                for op in ops:
+                    m = p[0].method(name, op.soap.input.name, op.soap.output.name)
+                    binding = m.binding.input
+                    method = (m.name, binding.param_defs(m))
+                    p[1].append(method)
+                    metrics.log.debug("method '%s' created: %s", m.name, timer)
+            p[1].sort(key=lambda x: x[0])
         timer.stop()
 
     def findport(self, port):
