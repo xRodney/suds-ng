@@ -19,28 +19,30 @@ The I{2nd generation} service proxy provides access to web services.
 See I{README.txt}
 """
 
-import suds
-from suds import metrics
+from copy import deepcopy
+from logging import getLogger
+
+import six
 from six.moves.http_cookiejar import CookieJar
+
+import suds
 from suds import TypeNotFound, BuildError, ServiceNotFound, PortNotFound, \
     MethodNotFound, WebFault, tostr
+from suds import metrics
+from suds import sudsobject
+from suds.builder import Builder
+from suds.cache import ObjectCache
+from suds.options import Options
+from suds.plugin import PluginContainer
+from suds.properties import Unskin
 from suds.reader import DefinitionsReader
+from suds.resolver import PathResolver
+from suds.sax.parser import Parser
+from suds.servicedefinition import ServiceDefinition
+from suds.sudsobject import Factory as InstFactory
 from suds.transport import TransportError, Request
 from suds.transport.https import HttpAuthenticated
-from suds.servicedefinition import ServiceDefinition
-from suds import sudsobject
-from suds.sudsobject import Factory as InstFactory
-from suds.resolver import PathResolver
-from suds.builder import Builder
 from suds.wsdl import Definitions
-from suds.cache import ObjectCache
-from suds.sax.parser import Parser
-from suds.options import Options
-from suds.properties import Unskin
-from copy import deepcopy
-from suds.plugin import PluginContainer
-from logging import getLogger
-import six
 
 log = getLogger(__name__)
 
@@ -529,7 +531,23 @@ class Method(object):
         self.method = methods[0] if len(methods) == 1 else None
 
     def get_method(self, *args, **kwargs):
-        return self.method
+        # Non overload version
+        if self.method is not None:
+            return self.method
+
+        if args:
+            raise suds.OverloadedMethodWithPositionalArgumentsError(self.methods[0].name)
+
+        arg_names = set(kwargs.keys())
+        arg_names.remove(SimClient.injkey)  # Possible __inject parameter is used only internally and never sent out
+
+        for method in self.methods:
+            method_arg_names = set((part.name for part in method.soap.input.body.parts))
+            if arg_names == method_arg_names:
+                return method
+
+        raise suds.OverloadedMethodNotMatchingError(self.methods[0].name)
+
 
     def __getitem__(self, item):
         return Method(self.client, [self.methods[item]])
@@ -539,7 +557,7 @@ class Method(object):
         Invoke the method.
         """
         clientclass = self.clientclass(kwargs)
-        client = clientclass(self.client, self.get_method(args, kwargs))
+        client = clientclass(self.client, self.get_method(*args, **kwargs))
         if not self.faults():
             try:
                 return client.invoke(args, kwargs)

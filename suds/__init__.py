@@ -28,6 +28,7 @@ import six
 __version__ = '0.4.2'
 __build__ = "(beta) 20151007"
 
+
 #
 # Exceptions
 #
@@ -51,6 +52,20 @@ class ServiceNotFound(Exception):
 class TypeNotFound(Exception):
     def __init__(self, name):
         Exception.__init__(self, "Type not found: '%s'" % tostr(name))
+
+
+class OverloadedMethodWithPositionalArgumentsError(Exception):
+    def __init__(self, name):
+        Exception.__init__(self, "It not possible to call an overloaded SOAP method '%s' with positional parameters. "
+                                 "Use named parameters instead." % name)
+
+
+class OverloadedMethodNotMatchingError(Exception):
+    def __init__(self, name):
+        Exception.__init__(self, "Unable to find a correct implementation for an overloaded method '%s'. "
+                                 "Please note that ALL parameters must be provided. "
+                                 "Use 'param=None' if you need to omit the parameter from the generated XML request."
+                           % name)
 
 
 class BuildError(Exception):
@@ -86,6 +101,7 @@ class WebFault(Exception):
         self.fault = fault
         self.document = document
 
+
 #
 # Logging
 #
@@ -97,6 +113,7 @@ class Repr:
 
     def __str__(self):
         return repr(self.x)
+
 
 #
 # Utility
@@ -161,5 +178,6 @@ class null:
 
 def objid(obj):
     return obj.__class__.__name__ + ':' + hex(id(obj))
+
 
 import suds.client
