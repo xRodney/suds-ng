@@ -38,13 +38,6 @@ def generate_empty_response(name):
         """ % name
 
 
-def check_real_method(real_method_object, expected_name, expected_output_part_names=[]):
-    assert real_method_object.name == expected_name
-    output_parts = real_method_object.soap.output.body.parts
-    output_part_names = [part.name for part in output_parts]
-    assert output_part_names == expected_output_part_names
-
-
 class OverloadTest(TestCase):
     def setUp(self):
         super().setUp()
@@ -54,87 +47,143 @@ class OverloadTest(TestCase):
         self.service = self.client.service
         self.methods = self.client.wsdl.services[0].ports[0].methods
 
-    def testOverload(self):
-        assert len(self.methods) == 4
-        job_submit_method = self.methods["Disco.Submit"]
-        job_list_method = self.methods["Disco.List"]
+    def testWsdlSchema(self):
+        self.assertEquals(len(self.methods), 4, "There are 4 methods in WSDL that have unique names")
+        self.assertEquals(len(self.methods["Disco.Submit"]), 3,
+                          "There are three overloaded methods named Disco.Submit in WSDL")
+        self.assertEquals(len(self.methods["Disco.List"]), 1, "There is only one method named Disco.List in WSDL")
+        self.assertEquals(len(self.methods["Disco.ListNew"]), 1, "There is only one method named Disco.ListNew in WSDL")
+        self.assertEquals(len(self.methods["Disco.Count"]), 1, "There is only one method named Disco.Count in WSDL")
 
-        assert len(job_submit_method) == 3
-        assert len(job_list_method) == 1
+    def testWsdlSchemaOverloadedMethods(self):
+        self.assertEquals(len(self.methods["Disco.Submit"]), 3,
+                          "There are three overloaded methods named Disco.Submit in WSDL")
+        [m1, m2, m3] = self.methods["Disco.Submit"]
 
-        [m1, m2, m3] = job_submit_method
+        self.assertIsNot(m1, m2, "The overloaded methods are distinct")
+        self.assertIsNot(m2, m3, "The overloaded methods are distinct")
+        self.assertIsNot(m3, m1, "The overloaded methods are distinct")
 
-        assert m1 is not m2
+        self.assertNotEqual(m1.soap, m2.soap, "The overloaded methods have distinct inputs and outputs")
+        self.assertNotEqual(m2.soap, m3.soap, "The overloaded methods have distinct inputs and outputs")
+        self.assertNotEqual(m3.soap, m1.soap, "The overloaded methods have distinct inputs and outputs")
 
-        assert m1.soap != m2.soap
-        assert m2.soap != m3.soap
-        assert m3.soap != m1.soap
-
-        sim = {"reply": generate_empty_response("Disco.Submit")}
+    def testNonOverloadedMethodIsCallable(self):
+        sim = {"reply": generate_empty_response("Disco.List")}
 
         call = getattr(self.service, "Disco.List")
-        assert len(call.methods) == 1
-        assert call.method is not None
+        self.assertEqual(len(call.methods), 1, "Disco.List is not overloaded")
+        self.assertIsNotNone(call.method, "The method is directly ready to be called on Method object")
 
+        # Magic parameter __inject allows us to inject the response without issuing any network requests
+        call(__inject=sim)
+        message = str(self.client.last_sent())
+        self.assertTrue("Disco.List/>" in str(message),
+                        "The method is called with an empty body (as we have not specified any arguments)")
+
+        call(1, __inject=sim)
+        message = str(self.client.last_sent())
+        self.assertTrue("Disco.List>" in message,
+                        "The method is called with a positional argument (other parameters are omitted)")
+        self.assertTrue("1</SessionID>" in message, "The positional argument is used")
+
+        call(ApplianceID=1, __inject=sim)
+        message = str(self.client.last_sent())
+        self.assertTrue("Disco.List>" in message,
+                        "The method is called with a named argument (other parameters are omitted)")
+        self.assertTrue("1</ApplianceID>" in message, "The named argument is used")
+
+    def assertCorrectMethodIsUsed(self, method, expected_name, expected_arguments, expected_results):
+        self.assertEquals(method.name, expected_name, "The method has an expected name")
+        input_parts = method.soap.input.body.parts
+        input_part_names = [part.name for part in input_parts]
+        self.assertEquals(input_part_names, expected_arguments, "The method has expected parameters")
+        output_parts = method.soap.output.body.parts
+        output_part_names = [part.name for part in output_parts]
+        self.assertEquals(output_part_names, expected_results, "The method has expected results")
+
+    def testOverloadedMethodsByIndex(self):
+        sim = {"reply": generate_empty_response("Disco.Submit")}
         overloaded_call = getattr(self.service, "Disco.Submit")
-        assert len(overloaded_call.methods) == 3
-        assert overloaded_call.method is None
 
-        call = overloaded_call[2]
-        check_real_method(call.method, "Disco.Submit", ["MalformedJob", "InvalidJob", "Msg"])
-        call(__inject=sim)
-        assert "Disco.Submit/>" in str(self.client.last_sent())
-
-        call = overloaded_call[1]
-        call(__inject=sim)
-        check_real_method(call.method, "Disco.Submit", ["invalidJob", "resendList"])
-        assert "Disco.Submit/>" in str(self.client.last_sent())
+        self.assertEqual(len(overloaded_call.methods), 3,
+                         "There are three overloaded methods named Disco.Submit in WSDL")
+        self.assertIsNone(overloaded_call.method, "The Method object is not preconfigured to use any method "
+                                                  "- it dispatches according to parameters or index")
 
         call = overloaded_call[0]
         call(__inject=sim)
-        check_real_method(call.method, "Disco.Submit", ["resendList"])
-        assert "Disco.Submit/>" in str(self.client.last_sent())
+        message = str(self.client.last_sent())
+        self.assertCorrectMethodIsUsed(call.method, "Disco.Submit",
+                                       ["sessionID", "errorMessage", "assetData"],
+                                       ["resendList"])
+        self.assertTrue("Disco.Submit/>" in message)
 
-        try:
+        call = overloaded_call[1]
+        call(__inject=sim)
+        message = str(self.client.last_sent())
+        self.assertCorrectMethodIsUsed(call.method, "Disco.Submit",
+                                       ["sessionID", "jobID", "jobComplete", "errorMessage", "assetData"],
+                                       ["invalidJob", "resendList"])
+        self.assertTrue("Disco.Submit/>" in message)
+
+        call = overloaded_call[2]
+        self.assertCorrectMethodIsUsed(call.method, "Disco.Submit",
+                                       ["SessionID", "ApplianceID", "JobID", "JobComplete", "ErrorMessage", "Asset"],
+                                       ["MalformedJob", "InvalidJob", "Msg"])
+        call(__inject=sim)
+        message = str(self.client.last_sent())
+        self.assertTrue("Disco.Submit/>" in message)
+
+    def testOverloadedMethodIsOnlyCallableWithExactParameters(self):
+        sim = {"reply": generate_empty_response("Disco.Submit")}
+        overloaded_call = getattr(self.service, "Disco.Submit")
+
+        with self.assertRaisesRegex(OverloadedMethodNotMatchingError, "'Disco\\.Submit'",
+                                    msg="It is not possible to call overloaded function "
+                                        "with not exact parameters (missing parameters)"):
             overloaded_call(__inject=sim)
-            assert False, "Exception must be thrown"
-        except OverloadedMethodNotMatchingError as ex:
-            assert "Disco.Submit" in str(ex)
+
+        with self.assertRaisesRegex(OverloadedMethodNotMatchingError, "'Disco\\.Submit'",
+                                    msg="It is not possible to call overloaded function "
+                                        "with not exact parameters (extra parameter)"):
+            overloaded_call(__inject=sim, sessionID=1, assetData="Data", errorMessage="No error", nonexistent="X")
+
+    def testOverloadedMethodIsNotCallableWithPositionalParameters(self):
+        sim = {"reply": generate_empty_response("Disco.Submit")}
+        overloaded_call = getattr(self.service, "Disco.Submit")
+
+        with self.assertRaisesRegex(OverloadedMethodWithPositionalArgumentsError, "'Disco\\.Submit'",
+                                    msg="It is not possible to call overloaded function "
+                                        "with positional parameters"):
+            overloaded_call(1, __inject=sim, assetData="Data", errorMessage="No error")
+
+    def testCorrectInvocationsOfOverloadedMethod(self):
+        sim = {"reply": generate_empty_response("Disco.Submit")}
+        overloaded_call = getattr(self.service, "Disco.Submit")
 
         overloaded_call(__inject=sim, sessionID=1, assetData="Data", errorMessage="No error")
         sent = str(self.client.last_sent())
-        assert "Disco.Submit>" in sent
-        assert ">1</sessionID>" in sent
-        assert ">No error</errorMessage>" in sent
-        assert ">Data</assetData>" in sent
+        self.assertIn("Disco.Submit>", sent, "Correct method is invoked")
+        self.assertIn(">1</sessionID>", sent, "SessionID is sent")
+        self.assertIn(">No error</errorMessage>", sent, "errorMessage is sent")
+        self.assertIn(">Data</assetData>", sent, "assetData is sent")
 
         overloaded_call(__inject=sim, sessionID=None, assetData=None, errorMessage="No error")
         sent = str(self.client.last_sent())
-        assert "Disco.Submit>" in sent
-        assert ">1</sessionID>" not in sent
-        assert ">No error</errorMessage>" in sent
-        assert ">Data</assetData>" not in sent
-
-        try:
-            overloaded_call(__inject=sim, sessionID=1, assetData="Data", errorMessage="No error", nonexistent="X")
-            assert False, "Exception must be thrown"
-        except OverloadedMethodNotMatchingError as ex:
-            assert "Disco.Submit" in str(ex)
-
-        try:
-            overloaded_call(1, __inject=sim, assetData="Data", errorMessage="No error")
-            assert False, "Exception must be thrown"
-        except OverloadedMethodWithPositionalArgumentsError as ex:
-            assert "Disco.Submit" in str(ex)
+        self.assertIn("Disco.Submit>", sent, "Correct method is invoked")
+        self.assertNotIn("sessionID", sent, "sessionID is not part of the message, it has been set to None")
+        self.assertIn(">No error</errorMessage>", sent, "errorMessage is sent")
+        self.assertNotIn("assetData", sent, "assetData is not part of the message, it has been set to None")
 
         overloaded_call(__inject=sim, sessionID=1, jobID=2, jobComplete=True, errorMessage="No error", assetData="Data")
         sent = str(self.client.last_sent())
-        assert "Disco.Submit>" in sent
-        assert ">1</sessionID>" in sent
-        assert ">2</jobID>" in sent
-        assert ">true</jobComplete>" in sent
-        assert ">No error</errorMessage>" in sent
-        assert ">Data</assetData>" in sent
+        self.assertIn("Disco.Submit>", sent, "Correct method is invoked")
+        self.assertIn(">1</sessionID>", sent, "sessionID is sent")
+        self.assertIn(">2</jobID>", sent, "jobID is sent")
+        self.assertIn(">true</jobComplete>", sent, "jobComplete is sent")
+        self.assertIn(">No error</errorMessage>", sent, "errorMessage is sent")
+        self.assertIn(">Data</assetData>", sent, "assetData is sent")
 
 
 if __name__ == '__main__':
