@@ -20,25 +20,38 @@ The primary class is I{Definitions} as it represends the root element
 found in the document.
 """
 
+import re
 from logging import getLogger
+
+from six.moves import urllib
+
 from suds import objid, TypeNotFound, MethodNotFound
-from suds.sax.element import Element
 from suds.bindings.document import Document
 from suds.bindings.rpc import RPC, Encoded
-from suds.xsd import qualify, Namespace
-from suds.xsd.schema import Schema, SchemaCollection
-from suds.xsd.query import ElementQuery
-from suds.sudsobject import Object, Facade, Metadata
 from suds.reader import DocumentReader
-import suds.soaparray
-import re
-from six.moves import urllib
+from suds.sax.element import Element
+from suds.sudsobject import Object, Facade, Metadata
+from suds.xsd import qualify, Namespace
+from suds.xsd.query import ElementQuery
+from suds.xsd.schema import Schema, SchemaCollection
 
 log = getLogger(__name__)
 
 wsdlns = (None, "http://schemas.xmlsoap.org/wsdl/")
 soapns = (None, 'http://schemas.xmlsoap.org/wsdl/soap/')
 soap12ns = (None, 'http://schemas.xmlsoap.org/wsdl/soap12/')
+
+
+class MultiDict(dict):
+    def add(self, key, value):
+        if key not in self:
+            self[key] = (value,)
+        else:
+            vals = self[key]
+            if len(vals) == 1:
+                self[key] = [vals[0], value]
+            else:
+                vals.append(value)
 
 
 class WObject(Object):
@@ -240,17 +253,14 @@ class Definitions(WObject):
                     m.name = name
                     m.location = p.location
                     m.binding = Facade('binding')
-                    op = binding.operation(name, operation.input, operation.output)
+                    op = binding.operation(name, operation.input.name, operation.output.name)
                     m.soap = op.soap
                     key = '/'.join((op.soap.style, op.soap.input.body.use))
                     m.binding.input = bindings.get(key)
                     key = '/'.join((op.soap.style, op.soap.output.body.use))
                     m.binding.output = bindings.get(key)
-                    op = ptype.operation(name)
 
-                    if name not in p.methods:
-                        p.methods[name] = []
-                    p.methods[name].append(m)
+                    p.methods.add(name, m)
 
     def set_wrapped(self):
         """ set (wrapped|bare) flag on messages """
@@ -449,7 +459,7 @@ class PortType(NamedObject):
     """
     Represents <portType/>.
     @ivar operations: A list of contained operations.
-    @type operations: list
+    @type operations: MultiDict
     """
 
     def __init__(self, root, definitions):
@@ -460,7 +470,7 @@ class PortType(NamedObject):
         @type definitions: L{Definitions}
         """
         NamedObject.__init__(self, root, definitions)
-        self.operations = {}
+        self.operations = MultiDict()
         for c in root.getChildren('operation'):
             op = Facade('Operation')
             op.name = c.get('name')
@@ -483,9 +493,7 @@ class PortType(NamedObject):
                 faults.append(f)
             op.faults = faults
 
-            if op.name not in self.operations:
-                self.operations[op.name] = []
-            self.operations[op.name].append(op)
+            self.operations.add(op.name, op)
 
     def resolve(self, definitions):
         """
@@ -520,19 +528,35 @@ class PortType(NamedObject):
                         raise Exception("msg '%s', not-found" % f.message)
                     f.message = msg
 
-    def operation(self, name):
+    def operation(self, name, input_name=None, output_name=None):
         """
         Shortcut used to get a contained operation by name.
         @param name: An operation name.
+        @param input_name: Input message name, used for resolution of overloaded methods
+        @param output_name: Output message name, used for resolution of overloaded methods
         @type name: str
         @return: The named operation.
         @rtype: Operation
         @raise L{MethodNotFound}: When not found.
         """
         try:
-            return self.operations[name]
+            ops = self.operations[name]
         except Exception:
             raise MethodNotFound(name)
+
+        if len(ops) == 1:
+            return ops[0]
+        elif input_name is not None and output_name is not None:
+            for op in ops:
+                if op.input.name == input_name and op.output.name == output_name:
+                    return op
+            raise Exception(
+                "operation '%s' is defined multiple times in portType and input/output names do not match to any of them" % name)
+        else:
+            raise Exception(
+                "operation '%s' is defined multiple times in portType and input/output names are not provided" % name)
+
+
 
     def __gt__(self, other):
         return isinstance(other, (Import, Types, Message))
@@ -542,7 +566,7 @@ class Binding(NamedObject):
     """
     Represents <binding/>
     @ivar operations: A list of contained operations.
-    @type operations: list
+    @type operations: MultiDict
     """
 
     def __init__(self, root, definitions):
@@ -553,7 +577,7 @@ class Binding(NamedObject):
         @type definitions: L{Definitions}
         """
         NamedObject.__init__(self, root, definitions)
-        self.operations = {}
+        self.operations = MultiDict()
         self.type = root.get('type')
         sr = self.soaproot()
         if sr is None:
@@ -618,9 +642,7 @@ class Binding(NamedObject):
                 faults.append(f)
             soap.faults = faults
 
-            if op.name not in self.operations:
-                self.operations[op.name] = []
-            self.operations[op.name].append(op)
+            self.operations.add(op.name, op)
 
     def body(self, definitions, body, root):
         """ add the input/output body properties """
@@ -699,19 +721,7 @@ class Binding(NamedObject):
         @param op: An I{operation} object.
         @type op: I{operation}
         """
-        ptops = self.type.operation(op.name)
-        if ptops is None:
-            raise Exception("operation '%s' not defined in portType" % op.name)
-        if len(ptops) == 1:
-            ptop = ptops[0]
-        else:
-            ptop = None
-            for p in ptops:
-                if p.input.name == op.soap.input.name and p.output.name == op.soap.output.name:
-                    ptop = p
-            if ptop is None:
-                raise Exception("operation '%s' is defined multiple times in portType and input/output names do not match to any of them" % op.name)
-
+        ptop = self.type.operation(op.name, op.soap.input.name, op.soap.output.name)
         soap = op.soap
         parts = soap.input.body.parts
         if len(parts):
@@ -765,7 +775,7 @@ class Binding(NamedObject):
         @param op: An I{operation} object.
         @type op: I{operation}
         """
-        ptop = self.type.operation(op.name)
+        ptop = self.type.operation(op.name, op.soap.input.name, op.soap.output.name)
         if ptop is None:
             raise Exception("operation '%s' not defined in portType" % op.name)
         soap = op.soap
@@ -778,10 +788,12 @@ class Binding(NamedObject):
                 continue
             raise Exception("fault '%s' not defined in portType '%s'" % (fault.name, self.type.name))
 
-    def operation(self, name, input=None, output=None):
+    def operation(self, name, input_name=None, output_name=None):
         """
         Shortcut used to get a contained operation by name.
         @param name: An operation name.
+        @param input_name: Operation input name, used for resolution of overloaded operations
+        @param output_name: Operation output name, used for resolution of overloaded operations
         @type name: str
         @return: The named operation.
         @rtype: Operation
@@ -794,9 +806,9 @@ class Binding(NamedObject):
 
         if len(ops) == 1:
             return ops[0]
-        elif input is not None and output is not None:
+        elif input_name is not None and output_name is not None:
             for op in ops:
-                if op.soap.input.name == input.name and op.soap.output.name == output.name:
+                if op.soap.input.name == input_name and op.soap.output.name == output_name:
                     return op
 
         raise MethodNotFound(name)
@@ -833,26 +845,29 @@ class Port(NamedObject):
             self.location = None
         else:
             self.location = address.get('location').encode('utf-8')
-        self.methods = {}
+        self.methods = MultiDict()
 
     def method(self, name, input_name=None, output_name=None):
         """
         Get a method defined in this portType by name.
         @param name: A method name.
+        @param input_name: Method's input name, used for resolution of overloaded methods
+        @param output_name: Method's output name, used for resolution of overloaded methods
         @type name: str
         @return: The requested method object.
         @rtype: I{Method}
         """
         methods = self.methods.get(name)
-        if len(methods) == 1:
+        if methods is None:
+            raise MethodNotFound(name)
+        elif len(methods) == 1:
             return methods[0]
         elif input_name is not None and output_name is not None:
             for m in methods:
                 if m.soap.input.name == input_name and m.soap.output.name == output_name:
                     return m
 
-
-        return None  # TODO: Throw exception????
+        return MethodNotFound(name)
 
 
 
