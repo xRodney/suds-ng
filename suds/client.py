@@ -541,13 +541,45 @@ class Method(object):
         arg_names = set(kwargs.keys())
         arg_names.remove(SimClient.injkey)  # Possible __inject parameter is used only internally and never sent out
 
-        for method in self.methods:
-            method_arg_names = set((part.name for part in method.soap.input.body.parts))
-            if arg_names == method_arg_names:
-                return method
+        methods = self.__methods_accepting_args(arg_names)
+        # Just one candidate -> return it
+        if len(methods) == 1:
+            return methods[0]
 
-        raise suds.OverloadedMethodNotMatchingError(self.methods[0].name)
+        # If there are multiple candidates (multiple methods accepting (superset of) provided arguments),
+        # there must be an exact match of arg names in one of them
+        methods = [m for m in methods if len(m.soap.input.body.parts) == len(arg_names)]
+        if len(methods) == 1:
+            return methods[0]
 
+        raise suds.OverloadedMethodNotMatchingError(self.methods[0].name, arg_names)
+
+    @staticmethod
+    def __part_names(method):
+        if not hasattr(method.soap.input, "part_names"):
+            method.soap.input.part_names = set((part.name for part in method.soap.input.body.parts))
+        return method.soap.input.part_names
+
+    def accepting_message(self, input_name):
+        methods = [m for m in self.methods if m.soap.input.name == input_name]
+        if not methods:
+            raise MethodNotFound(self.methods[0].name, "accepting message '%s'" % input_name)
+        return Method(self.client, methods)
+
+    def returning_message(self, output_name):
+        methods = [m for m in self.methods if m.soap.output.name == output_name]
+        if not methods:
+            raise MethodNotFound(self.methods[0].name, "returning message '%s'" % output_name)
+        return Method(self.client, methods)
+
+    def __methods_accepting_args(self, arg_names):
+        methods = [m for m in self.methods if Method.__part_names(m).issuperset(arg_names)]
+        if not methods:
+            raise MethodNotFound(self.methods[0].name, "accepting arguments: '%s'" % "', '".join(arg_names))
+        return methods
+
+    def accepting_args(self, *arg_names):
+        return Method(self.client, self.__methods_accepting_args(set(arg_names)))
 
     def __getitem__(self, item):
         return Method(self.client, [self.methods[item]])

@@ -16,7 +16,7 @@
 import os
 import sys
 
-from suds import OverloadedMethodNotMatchingError, OverloadedMethodWithPositionalArgumentsError
+from suds import OverloadedMethodNotMatchingError, OverloadedMethodWithPositionalArgumentsError, MethodNotFound
 from suds.client import Client
 
 sys.path.insert(0, '../')
@@ -39,6 +39,9 @@ def generate_empty_response(name):
 
 
 class OverloadTest(TestCase):
+    """
+    Test of a legaxy AXIS service with method overloading
+    """
     def setUp(self):
         super().setUp()
         url = 'file://' + os.path.abspath("test_overload_DuckService.wsdl")
@@ -144,7 +147,7 @@ class OverloadTest(TestCase):
                                         "with not exact parameters (missing parameters)"):
             overloaded_call(__inject=sim)
 
-        with self.assertRaisesRegex(OverloadedMethodNotMatchingError, "'Disco\\.Submit'",
+        with self.assertRaisesRegex(MethodNotFound, "'Disco\\.Submit'",
                                     msg="It is not possible to call overloaded function "
                                         "with not exact parameters (extra parameter)"):
             overloaded_call(__inject=sim, sessionID=1, assetData="Data", errorMessage="No error", nonexistent="X")
@@ -184,6 +187,89 @@ class OverloadTest(TestCase):
         self.assertIn(">true</jobComplete>", sent, "jobComplete is sent")
         self.assertIn(">No error</errorMessage>", sent, "errorMessage is sent")
         self.assertIn(">Data</assetData>", sent, "assetData is sent")
+
+    def testAcceptingMessage(self):
+        overloaded_call = getattr(self.service, "Disco.Submit")
+
+        self.assertEqual(len(overloaded_call.methods), 3, "There are 3 overloaded methods")
+        self.assertIsNotNone(overloaded_call.accepting_message("Disco.SubmitRequest").method)
+        self.assertIsNotNone(overloaded_call.accepting_message("Disco.SubmitRequest2").method)
+        self.assertIsNotNone(overloaded_call.accepting_message("Disco.SubmitRequestOld").method)
+        with self.assertRaises(MethodNotFound):
+            overloaded_call.accepting_message("NonExistentRequest")
+
+    def testReturningMessage(self):
+        overloaded_call = getattr(self.service, "Disco.Submit")
+
+        self.assertEqual(len(overloaded_call.methods), 3, "There are 3 overloaded methods")
+        self.assertIsNotNone(overloaded_call.returning_message("Disco.SubmitResponse").method)
+        self.assertIsNotNone(overloaded_call.returning_message("Disco.SubmitResponse2").method)
+        self.assertIsNotNone(overloaded_call.returning_message("Disco.SubmitResponseOld").method)
+        with self.assertRaises(MethodNotFound):
+            overloaded_call.returning_message("NonExistentResponse")
+
+    def testAcceptingArguments1(self):
+        overloaded_call = getattr(self.service, "Disco.Submit")
+        sim = {"reply": generate_empty_response("Disco.Submit")}
+
+        self.assertEqual(len(overloaded_call.methods), 3, "There are 3 overloaded methods")
+        call = overloaded_call.accepting_args("sessionID")
+        self.assertEqual(len(call.methods), 2, "There are 2 methods accepting sessionID")
+        call = call.accepting_args("assetData")
+        self.assertEqual(len(call.methods), 2, "... out of which both methods accept assetData")
+        call = call.accepting_args("jobID")
+        self.assertEqual(len(call.methods), 1, "... out of which 1 method accept jobID")
+
+        self.assertIsNotNone(call(1, 2, 3, __inject=sim), "It is possible to call "
+                                                          "a fully resolved method with positional arguments")
+
+    def testAcceptingArguments2(self):
+        overloaded_call = getattr(self.service, "Disco.Submit")
+        sim = {"reply": generate_empty_response("Disco.Submit")}
+
+        self.assertEqual(len(overloaded_call.methods), 3, "There are 3 overloaded methods")
+        call = overloaded_call.accepting_args("sessionID", "jobID")
+        self.assertIsNotNone(call.method, "There is just 1 method accepting sessionID and jobID")
+
+        self.assertIsNotNone(call(1, 2, 3, __inject=sim), "It is possible to call "
+                                                          "a fully resolved method with positional arguments")
+
+    def testAcceptingArguments3(self):
+        overloaded_call = getattr(self.service, "Disco.Submit")
+
+        self.assertEqual(len(overloaded_call.methods), 3, "There are 3 overloaded methods")
+        with self.assertRaises(MethodNotFound):
+            overloaded_call.accepting_args("sessionID", "jobID", "nonexistentArgument")
+
+
+class NonOverloadTest(TestCase):
+    """
+    Test of a CXF service that does not support overloading.
+    Still, all functionality must work without errors
+    """
+
+    def setUp(self):
+        super().setUp()
+        url = 'file://' + os.path.abspath("test_overload_DuckService2.wsdl")
+        self.client = Client(url)
+        print(self.client)
+        self.service = self.client.service
+        self.methods = self.client.wsdl.services[0].ports[0].methods
+
+    def testLoadCxfGeneratedSchema(self):
+        self.assertEqual(len(self.methods), 2, "There are 2 methods")
+
+    def testInvoke(self):
+        sim = {"reply": generate_empty_response("duckList")}
+        self.service.duckList(__inject=sim)
+        sent = str(self.client.last_sent())
+        self.assertIn("duckList>", sent, "Correct method is invoked");
+
+        sim = {"reply": generate_empty_response("duckAdd")}
+        self.service.duckAdd(__inject=sim)
+        sent = str(self.client.last_sent())
+        self.assertIn("duckAdd>", sent, "Correct method is invoked");
+
 
 
 if __name__ == '__main__':

@@ -35,8 +35,11 @@ __build__ = "(beta) 20151007"
 
 
 class MethodNotFound(Exception):
-    def __init__(self, name):
-        Exception.__init__(self, "Method not found: '%s'" % name)
+    def __init__(self, name, detail=None):
+        if detail:
+            Exception.__init__(self, "Method not found: '%s', %s" % (name, detail))
+        else:
+            Exception.__init__(self, "Method not found: '%s'" % name)
 
 
 class PortNotFound(Exception):
@@ -61,11 +64,12 @@ class OverloadedMethodWithPositionalArgumentsError(Exception):
 
 
 class OverloadedMethodNotMatchingError(Exception):
-    def __init__(self, name):
-        Exception.__init__(self, "Unable to find a correct implementation for an overloaded method '%s'. "
-                                 "Please note that ALL parameters must be provided. "
-                                 "Use 'param=None' if you need to omit the parameter from the generated XML request."
-                           % name)
+    def __init__(self, name, args):
+        Exception.__init__(self,
+                           "Unable to find a correct implementation for an overloaded method '%s' with arguments: "
+                           "'%s'. "
+                           "Use 'param=None' to use parameter for resolution while omitting it from the message."
+                           % (name, "', '".join(args)))
 
 
 class BuildError(Exception):
