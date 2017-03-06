@@ -20,20 +20,19 @@ The primary class is I{Definitions} as it represends the root element
 found in the document.
 """
 
-import re
 from logging import getLogger
-
-from six.moves import urllib
-
 from suds import objid, TypeNotFound, MethodNotFound
+from suds.sax.element import Element
 from suds.bindings.document import Document
 from suds.bindings.rpc import RPC, Encoded
-from suds.reader import DocumentReader
-from suds.sax.element import Element
-from suds.sudsobject import Object, Facade, Metadata
 from suds.xsd import qualify, Namespace
-from suds.xsd.query import ElementQuery
 from suds.xsd.schema import Schema, SchemaCollection
+from suds.xsd.query import ElementQuery
+from suds.sudsobject import Object, Facade, Metadata
+from suds.reader import DocumentReader
+import suds.soaparray
+import re
+from six.moves import urllib
 
 log = getLogger(__name__)
 
