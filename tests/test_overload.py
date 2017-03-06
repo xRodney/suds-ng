@@ -42,16 +42,18 @@ class OverloadTest(TestCase):
     """
     Test of a legaxy AXIS service with method overloading
     """
+
     def setUp(self):
         super().setUp()
         url = 'file://' + os.path.abspath("test_overload_DuckService.wsdl")
         self.client = Client(url)
         print(self.client)
         self.service = self.client.service
+        self.factory = self.client.factory
         self.methods = self.client.wsdl.services[0].ports[0].methods
 
     def testWsdlSchema(self):
-        self.assertEquals(len(self.methods), 4, "There are 4 methods in WSDL that have unique names")
+        self.assertEquals(len(self.methods), 5, "There are 5 methods in WSDL that have unique names")
         self.assertEquals(len(self.methods["Disco.Submit"]), 3,
                           "There are three overloaded methods named Disco.Submit in WSDL")
         self.assertEquals(len(self.methods["Disco.List"]), 1, "There is only one method named Disco.List in WSDL")
@@ -241,6 +243,23 @@ class OverloadTest(TestCase):
         with self.assertRaises(MethodNotFound):
             overloaded_call.accepting_args("sessionID", "jobID", "nonexistentArgument")
 
+    def testArrays(self):
+        call = getattr(self.service, "KeepAlive")
+
+        value = self.factory.create("T_KeyValuePair")
+        value.Key = "key"
+        value.Value = "value"
+        call(1, [value], __inject={"reply": generate_empty_response("KeepAlive")})
+
+        msg = str(self.client.last_sent())
+        self.assertRegex(msg,
+                         '<Details xsi:type=".*:ArrayOf_tns1_T_KeyValuePair" .*:arrayType=".*:T_KeyValuePair\[1\]">')
+        self.assertRegex(msg, '<item xsi:type=".*:T_KeyValuePair">')
+        self.assertRegex(msg, '<Key xsi:type=".*:string">key</Key>')
+        self.assertRegex(msg, '<Value xsi:type=".*:string">value</Value>')
+        self.assertRegex(msg, '</item>')
+        self.assertRegex(msg, '</Details>')
+
 
 class NonOverloadTest(TestCase):
     """
@@ -269,7 +288,6 @@ class NonOverloadTest(TestCase):
         self.service.duckAdd(__inject=sim)
         sent = str(self.client.last_sent())
         self.assertIn("duckAdd>", sent, "Correct method is invoked");
-
 
 
 if __name__ == '__main__':
