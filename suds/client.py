@@ -539,7 +539,7 @@ class Method(object):
             raise suds.OverloadedMethodWithPositionalArgumentsError(self.methods[0].name)
 
         arg_names = set(kwargs.keys())
-        arg_names.remove(SimClient.injkey)  # Possible __inject parameter is used only internally and never sent out
+        arg_names.discard(SimClient.injkey)  # Possible __inject parameter is used only internally and never sent out
 
         methods = self.__methods_accepting_args(arg_names)
         # Just one candidate -> return it
