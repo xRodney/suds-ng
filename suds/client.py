@@ -255,6 +255,20 @@ class Factory(object):
         """
         self.resolver = PathResolver(self.wsdl, ps)
 
+    def __getattr__(self, item):
+        return self.__getitem__(item)
+
+    def __getitem__(self, item):
+        def creator(**kwargs):
+            obj = self.create(item)
+            for name, value in kwargs.items():
+                if not hasattr(obj, name):
+                    raise AttributeError("Object {} does not have attribute {}".format(item, name))
+                setattr(obj, name, value)
+            return obj
+
+        return creator
+
 
 class ServiceSelector(object):
     """
