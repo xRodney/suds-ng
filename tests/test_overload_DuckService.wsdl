@@ -215,11 +215,11 @@
             <wsdlsoap:operation soapAction=""/>
             <wsdl:input name="KeepAliveRequest">
                 <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
-                               namespace="http://www.n-able.com/mickey" use="encoded"/>
+                               namespace="http://www.example.com/donald" use="encoded"/>
             </wsdl:input>
             <wsdl:output name="KeepAliveResponse">
                 <wsdlsoap:body encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"
-                               namespace="http://www.n-able.com/mickey" use="encoded"/>
+                               namespace="http://www.example.com/donald" use="encoded"/>
             </wsdl:output>
         </wsdl:operation>
 
