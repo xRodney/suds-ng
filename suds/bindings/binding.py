@@ -18,22 +18,23 @@
 Provides classes for (WS) SOAP bindings.
 """
 
+from copy import deepcopy
 from logging import getLogger
+
 from suds import WebFault, TypeNotFound
-from suds.sax import Namespace
-from suds.sax.parser import Parser
-from suds.sax.document import Document
-from suds.sax.element import Element
-from suds.sudsobject import Factory
+from suds.bindings.multiref import MultiRef
 from suds.mx import Content
 from suds.mx.literal import Literal as MxLiteral
+from suds.plugin import PluginContainer
+from suds.sax import Namespace
+from suds.sax.document import Document
+from suds.sax.element import Element
+from suds.sax.parser import Parser
+from suds.sudsobject import Factory
 from suds.umx.basic import Basic as UmxBasic
 from suds.umx.typed import Typed as UmxTyped
-from suds.bindings.multiref import MultiRef
 from suds.xsd.query import TypeQuery, ElementQuery
 from suds.xsd.sxbasic import Element as SchemaElement
-from suds.plugin import PluginContainer
-from copy import deepcopy
 
 log = getLogger(__name__)
 
@@ -180,6 +181,85 @@ class Binding(object):
         if self.options().faults:
             raise WebFault(p, fault)
         return self
+
+    def read_message(self, message):
+        """
+        Read soap message string
+        @param message: The SOAP message - can be a request or a response
+        @type message: str
+        @return: Tuple of the raw parsed message and soap body
+        """
+        sax = Parser()
+        messageroot = sax.parse(string=message)
+        soapenv = messageroot.getChild('Envelope')
+        soapenv.promotePrefixes()
+        soapbody = soapenv.getChild('Body')
+        self.detect_fault(soapbody)
+        self.multiref.process(soapbody)
+        return messageroot, soapbody
+
+    def parse_message(self, method, messageroot, soapbody=None, input=False):
+        """
+        Parse the XML soap message into Suds objects
+        @param method: The SOAP method the is being called. Depending on the value of input parameters, its income or
+        outcome will be used in deserialization.
+        @type method: I{service.Method}
+        @param messageroot: Root of the message
+        @type messageroot
+        @param soapbody: Soap body element of the message. If None, it will be found in the messageroot.
+        @type soapbody
+        @param input: If True, the message represents the request for the call, if False, it is a response.
+        @type input: bool
+        @return: Suds object representing the message
+        """
+        if not soapbody:
+            soapenv = messageroot.getChild('Envelope')
+            soapenv.promotePrefixes()
+            soapbody = soapenv.getChild('Body')
+
+        nodes = soapbody.children
+        rtypes = self.bodypart_types(method, input=input)
+        rtypes = [rt[1] if isinstance(rt, tuple) else rt for rt in rtypes]
+        if len(rtypes) > 1:
+            result = self.replycomposite(rtypes, nodes)
+            return result
+        if len(rtypes) == 1:
+            if rtypes[0].unbounded():
+                result = self.replylist(rtypes[0], nodes)
+                return result
+            if len(nodes):
+                unmarshaller = self.unmarshaller()
+                resolved = rtypes[0].resolve(nobuiltin=True)
+                result = unmarshaller.process(nodes[0], resolved)
+                return result
+        return None
+
+    def write_reply(self, method, obj):
+        """
+        Get the soap reply message for the specified method and object.
+        @param method: The method being invoked.
+        @type method: I{service.Method}
+        @param obj: Response object
+        @type obj: I{sudsobject}
+        @return: The soap envelope.
+        @rtype: L{Document}
+        """
+
+        content = self.headercontent(method)
+        header = self.header(content)
+
+        element = method.soap.output.body.parts[0].element
+        pd = self.wsdl.schema.elements[element]
+
+        content = self.mkparam(method, (element[0], pd), obj)
+        body = self.body(content)
+        env = self.envelope(header, body)
+        if self.options().prefixes:
+            body.normalizePrefixes()
+            env.promotePrefixes()
+        else:
+            env.refitPrefixes()
+        return Document(env)
 
     def replylist(self, rt, nodes):
         """
