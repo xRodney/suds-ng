@@ -16,20 +16,19 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 # written by: Jeff Ortel ( jortel@redhat.com )
 
-import suds
 from setuptools import setup, find_packages
 
+import suds
+
 setup(
-    name="suds-ng",
+    name="suds-sw",
     version=suds.__version__,
-    description="Lightweight SOAP client - fork of suds",
-    author="Felix Yan",
-    author_email="felixonmars@gmail.com",
-    maintainer="Felix Yan",
-    maintainer_email="felixonmars@gmail.com",
+    description="Lightweight SOAP client - fork of suds-ng",
+    author="Felix Yan, Dusan Jakub",
+    maintainer="Dusan Jakub",
     packages=find_packages(exclude=['tests']),
     install_requires=[
         "six"
     ],
-    url="https://github.com/felixonmars/suds-ng",
+    url="https://github.com/xRodney/suds-sw",
 )
