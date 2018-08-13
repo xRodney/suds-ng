@@ -139,10 +139,9 @@ class Appender(object):
 
         if content.type.type == ('anyType', 'http://www.w3.org/2001/XMLSchema'):
             for python_type, xsi_type in self.primitives:
-                print(content.value)
-                print(python_type)
                 if isinstance(content.value, python_type):
                     node['xsi:type'] = 'xs:%s' % xsi_type
+                    node['xmlns:xs'] = "http://www.w3.org/2001/XMLSchema"
                     break
             else:
                 raise TypeError('Could not determine type for %s' % type(content.value))
