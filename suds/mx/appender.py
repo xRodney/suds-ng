@@ -13,6 +13,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 # written by: Jeff Ortel ( jortel@redhat.com )
+from datetime import datetime
 
 """
 Provides appender classes for I{marshalling}.
@@ -116,6 +117,14 @@ class Appender(object):
         """
         self.marshaller = marshaller
 
+        self.primitives = (
+            (datetime, 'dateTime'),
+            (float, 'float'),
+            (bool, 'boolean'),
+            (int, 'double'),  # must come after bool
+            (str, 'string'),
+        )
+
     def node(self, content):
         """
         Create and return an XML node that is qualified
@@ -126,7 +135,18 @@ class Appender(object):
         @return: A new node.
         @rtype: L{Element}
         """
-        return self.marshaller.node(content)
+        node = self.marshaller.node(content)
+
+        if content.type.type == ('anyType', 'http://www.w3.org/2001/XMLSchema'):
+            for python_type, xsi_type in self.primitives:
+                if isinstance(content.value, python_type):
+                    node['xsi:type'] = 'xs:%s' % xsi_type
+                    node['xmlns:xs'] = "http://www.w3.org/2001/XMLSchema"
+                    break
+            else:
+                raise TypeError('Could not determine type for %s' % type(content.value))
+
+        return node
 
     def setnil(self, node, content):
         """

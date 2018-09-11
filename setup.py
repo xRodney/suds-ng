@@ -24,7 +24,7 @@ setup(
     name="suds-sw",
     version=suds.__version__,
     description="Lightweight SOAP client - fork of suds-ng",
-    author="Felix Yan, Dusan Jakub",
+    author="Felix Yan, Dusan Jakub, Jiri Uhlir",
     maintainer="Dusan Jakub",
     packages=find_packages(exclude=['tests']),
     install_requires=[
