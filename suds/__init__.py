@@ -25,7 +25,7 @@ import six
 # Project properties
 #
 
-__version__ = '0.4.3'
+__version__ = '0.4.4'
 __build__ = "(beta) 20151007"
 
 
